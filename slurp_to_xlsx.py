@@ -56,6 +56,12 @@ def convert(input_path, output_path):
             scenario = rec.get("scenario", "")
             action = rec.get("action", "")
             intent = rec.get("intent", "")
+            # SLURP paper defines intent as scenario_action (60 unique classes).
+            # The raw "intent" field in the jsonl is occasionally missing the
+            # scenario prefix (e.g. "sendemail" instead of "email_sendemail"),
+            # which inflates the unique-intent count if used as-is. This
+            # reconstructs the canonical label from scenario + action.
+            intent_corrected = f"{scenario}_{action}"
             recordings = rec.get("recordings", [])
 
             ents_words = format_entities_words(entities, tokens)
@@ -70,7 +76,8 @@ def convert(input_path, output_path):
                         "entities (type: spans)": ents_spans,
                         "scenario": scenario,
                         "action": action,
-                        "intent": intent,
+                        "intent (raw)": intent,
+                        "intent (corrected)": intent_corrected,
                         "file name": r.get("file", ""),
                     })
             else:
@@ -82,13 +89,14 @@ def convert(input_path, output_path):
                     "entities (type: spans)": ents_spans,
                     "scenario": scenario,
                     "action": action,
-                    "intent": intent,
+                    "intent (raw)": intent,
+                    "intent (corrected)": intent_corrected,
                     "file name": "",
                 })
 
     df = pd.DataFrame(rows, columns=[
         "slurp id", "sentence", "entities (type: words)", "entities (type: spans)",
-        "scenario", "action", "intent", "file name",
+        "scenario", "action", "intent (raw)", "intent (corrected)", "file name",
     ])
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
@@ -96,7 +104,7 @@ def convert(input_path, output_path):
         ws = writer.sheets["slurp"]
         # basic formatting: professional font, sensible column widths, frozen header
         from openpyxl.styles import Font
-        widths = {"A": 10, "B": 45, "C": 40, "D": 30, "E": 14, "F": 14, "G": 16, "H": 35}
+        widths = {"A": 10, "B": 45, "C": 40, "D": 30, "E": 14, "F": 14, "G": 18, "H": 18, "I": 35}
         for col, w in widths.items():
             ws.column_dimensions[col].width = w
         for row in ws.iter_rows():
